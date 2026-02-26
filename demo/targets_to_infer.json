@@ -1,0 +1,40 @@
+{
+    "gene_groups": [
+        {
+            "null_number": 0.05,
+            "groups": [
+                { "genes": ["CD4"] },
+                {
+                    "genes": ["CD2", "CD3D", "CD3E", "CD4", "CD8A", "CD19", "CD247",
+                              "CD27", "CD28", "CD70", "CD79A", "IL7R",
+                              "MS4A1", "FOXP3", "PDCD1"],
+                    "name": "TLS_meta"
+                },
+                {
+                    "genes": ["ANGPT2", "PECAM1", "VWF", "EGFL7", "CLEC14A", "EDN1"],
+                    "name": "angiogenic_meta"
+                },
+                {
+                    "genes": ["SNAI1", "VCAN", "TNC", "MET", "PDGFRB"],
+                    "name": "metastatic_meta"
+                },
+                {
+                    "genes": ["CFB", "C7", "CFHR1", "CFHR3"],
+                    "name": "complement_meta"
+                }
+            ]
+        }
+    ],
+     "ct_groups": [
+        {
+            "null_number": 0,
+            "groups": [
+                { "cell_types": ["B cells", "T cells", "Dendritic cells"], 
+                "name": "TLS_celltype" 
+                },
+                { "cell_types": ["Epithelial cells (Malignant)"] },
+                { "cell_types": ["Smooth muscle cells"] }
+            ]
+        }
+    ]
+}

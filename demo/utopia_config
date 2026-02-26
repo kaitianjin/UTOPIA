@@ -1,0 +1,75 @@
+[global]
+# The directory containing the input data for UTOPIA.
+data_dir  = demo/
+# The directory where UNI's pytorch model bin file is located. 
+# Due to license restrictions,
+# we cannot provide the model checkpoint file in this repository.
+# Please download the model from https://huggingface.co/MahmoodLab/UNI 
+# and put the pytorch_model.bin file in this directory. 
+# For demo purposes, we have already provided extracted features so you 
+# don't need to change this model_dir.
+model_dir = /PATH/TO/UNI_MODEL_DIR/
+
+[histosweep]
+# Minimum size for filtering small objects in the background of H&E images.
+# Set this to 0 if you don't want to filter small objects.
+# Set this to a large number if you want to filter out most of the background.
+# The default value is 50, which corresponds to 50 superpixels, about
+# 3200 square microns.
+min_size  = 50
+
+[roi]
+num_roi = 2
+# Row,col pairs for the top-left corners of each ROI, separated by semicolons.
+# All numbers are in superpixels, not raw pixels. A superpixel is 16x16 pixels.
+# When pixel size is 0.5 um, one superpixel corresponds to 8 microns.
+# So 504 superpixels correspond to 4032 microns (~ 4 mm).
+top_left = 320,400;240,1800
+# Width and height of each ROI (in superpixels), comma-separated.
+width  = 504,504
+height = 504,504
+
+[scale]
+# the original pixel size of he_raw image in microns
+pixel_size_raw = 0.5 
+# Scale factors, space-separated.
+# scale = 1 corresponds to the original superpixel size (16x16 pixels),
+# scale = 2 corresponds to 32x32 pixels, etc.
+# List the resolutions you want UTOPIA to infer confidence scores on.
+scales = 1 2 4
+
+[clustering]
+# Number of clusters to segment the histology image. For heterogenous
+# tissues, choose a large number of clusters. Also need to check if ROIs
+# contain clusters you are interested in.
+# Check the cluster assignments in
+#   histology_clustering/he_clusters_image_scale_{scale}_num_{n_clusters}.png
+#   histology_clustering/he_clusters_roi_{roi_index}_scale_{scale}_num_{n_clusters}.png
+n_clusters = 15
+
+[calibration]
+# ROI indices for training and calibration, space-separated. Index for ROI
+# starts from 0. For example, if you have 4 ROIs and want to use the first
+# 2 ROIs for training and the last 2 ROIs for calibration, 
+# set roi_train_indices to "0 1" and roi_calib_indices to "2 3".
+roi_train_indices  = 0 1
+roi_calib_indices  = 0 1
+# If cell_type prediction is not enabled, set this to 1. Otherwise, set this to 
+# the number of cell types in your data.
+n_cell_types       = 14
+# Decrease this number if you encounter GPU or CPU memory issues.
+# Increase this number to speed up calibration but needs more GPU/CPU memory.
+parallel_processes = 8
+
+[predict]
+# Prediction for genes. Make sure you put tr_image_scale_1.npy and
+# idx_to_gene.pickle inside 'transcripts' folder.
+gene      = true
+# Prediction for cell types. Make sure you put ct_image_scale_1.npy and
+# idx_to_ct.pickle inside 'cell type' folder.
+cell_type = true
+
+[inference]
+# json file containing the list of genes/cell types/meta-gene/composite cell types
+# to infer prediction confidence. 
+infer_json = demo/targets_to_infer.json
