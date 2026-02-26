@@ -6,9 +6,13 @@ import sys
 
 def main():
     parser = argparse.ArgumentParser(description="UTOPIA spatial pathology pipeline")
-    parser.add_argument('--config', type=str, required=True,
+    parser.add_argument('--config', type=str, 
                         help='Path to utopia_config file')
     parser.add_argument('--rescale_raw_he',      action='store_true', help='Rescale raw H&E image')
+    parser.add_argument('--he_raw', type=str,
+                        help='Path to the original raw H&E image (e.g. "data/raw/he.tiff"); required with --rescale_raw_he')
+    parser.add_argument('--pixel_size_raw', type=str,
+                        help='Pixel size of the original raw H&E image in microns (e.g. 0.25); required with --rescale_raw_he')
     parser.add_argument('--get_tissue_mask',     action='store_true', help='Get tissue mask')
     parser.add_argument('--process_roi_data',    action='store_true', help='Prepare transcript/cell-type data for ROI')
     parser.add_argument('--feature_extraction',  action='store_true', help='UNI feature extraction')
@@ -17,6 +21,23 @@ def main():
     parser.add_argument('--inference',           action='store_true', help='Inference')
     args = parser.parse_args()
 
+    if args.rescale_raw_he and (not args.he_raw or args.pixel_size_raw is None):
+        parser.error('--he_raw and --pixel_size_raw are required when --rescale_raw_he is set')
+
+    def run(cmd):
+        print(f"[UTOPIA] Running: {' '.join(str(c) for c in cmd)}")
+        subprocess.run(cmd, check=True)
+    py = sys.executable
+
+    # ------------------------------------------------------------------
+    # Rescale original raw H&E image to 0.5 um/pixel
+    # ------------------------------------------------------------------
+    if args.rescale_raw_he:
+        run([py, '-m', 'UTOPIA.img_process.scaling_he_image',
+             '--he_raw', args.he_raw,
+             '--pixel_size_raw', args.pixel_size_raw])
+        return
+        
     steps = {
         'rescale_raw_he':       args.rescale_raw_he,
         'get_tissue_mask':      args.get_tissue_mask,
@@ -29,6 +50,8 @@ def main():
     run_all = not any(steps.values())
 
     cfg = configparser.ConfigParser()
+    if args.config is None:
+        parser.error('--config is required')
     cfg.read(args.config)
 
     # Global
@@ -45,7 +68,6 @@ def main():
     roi_height   = cfg['roi']['height']
 
     # Scale
-    pixel_size_raw = cfg['scale']['pixel_size_raw']
     scales         = cfg['scale']['scales']           # e.g. "1 2 4"
     emb_scales = ' '.join(s for s in scales.split() if s != '1')  # e.g. "2 4"
 
@@ -65,12 +87,6 @@ def main():
 
     infer_json = cfg['inference']['infer_json']
 
-    py = sys.executable
-
-    def run(cmd):
-        print(f"[UTOPIA] Running: {' '.join(str(c) for c in cmd)}")
-        subprocess.run(cmd, check=True)
-
     roi_args = [
         '--roi-top-left', roi_top_left,
         '--roi-width', roi_width,
@@ -78,15 +94,7 @@ def main():
     ]
 
     # ------------------------------------------------------------------
-    # 1. Rescale original raw H&E image to 0.5 um/pixel
-    # ------------------------------------------------------------------
-    if run_all or steps['rescale_raw_he']:
-        run([py, '-m', 'UTOPIA.img_process.scaling_he_image',
-             '--data_path', data_dir,
-             '--pixel_size_raw', pixel_size_raw])
-
-    # ------------------------------------------------------------------
-    # 2. Get tissue mask
+    # 1. Get tissue mask
     # ------------------------------------------------------------------
     if run_all or steps['get_tissue_mask']:
         run([py, '-m', 'UTOPIA.img_process.get_tissue_mask',
@@ -103,7 +111,7 @@ def main():
              '--he_mask', '--wsi', '--roi', '--num_roi', num_roi])
         
     # ------------------------------------------------------------------
-    # 3. UNI feature extraction
+    # 2. UNI feature extraction
     # ------------------------------------------------------------------
     if run_all or steps['feature_extraction']:
         run([py, '-m', 'UTOPIA.img_process.feature_extraction_uni',
@@ -124,7 +132,7 @@ def main():
              '--wsi', '--roi', '--clean', '--num_roi', num_roi])
      
     # ------------------------------------------------------------------
-    # 4. Prepare transcript / cell-type data for ROI
+    # 3. Prepare transcript / cell-type data for ROI
     # ------------------------------------------------------------------
     if run_all or steps['process_roi_data']:
         if predict_gene:
@@ -145,7 +153,7 @@ def main():
 
 
     # ------------------------------------------------------------------
-    # 5. Histology clustering
+    # 4. Histology clustering
     # ------------------------------------------------------------------
     if run_all or steps['histology_clustering']:
         run([py, '-m', 'UTOPIA.img_process.histology_clustering',
@@ -155,7 +163,7 @@ def main():
              '--n_clusters', n_clusters])
 
     # ------------------------------------------------------------------
-    # 6. Calibration
+    # 5. Calibration
     # ------------------------------------------------------------------
     if run_all or steps['calibration']:
         run([py, '-m', 'UTOPIA.calibration.generate_folds',
@@ -178,7 +186,7 @@ def main():
                  '--parallel_processes', parallel_procs])
 
     # ------------------------------------------------------------------
-    # 7. Inference
+    # 6. Inference
     # ------------------------------------------------------------------
     if run_all or steps['inference']:
         run([py, '-m', 'UTOPIA.inference.run',
@@ -187,7 +195,7 @@ def main():
              '--num_he_clusters', n_clusters,
              '--roi_calib_indices', *roi_calib_indices.split(),
              '--scales', *scales.split(),
-             '--visualize', '--diagnostic'])
+             '--visualize'])
 
 
 if __name__ == '__main__':

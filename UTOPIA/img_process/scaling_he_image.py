@@ -26,31 +26,21 @@ def crop_image(img, extent, mode='edge', constant_values=None):
         img = img.take(range(lower, upper), axis=i)
     return img
 
-def get_image_filename(prefix):
-    file_exists = False
+def get_image_filename(he_raw):
     if_ome_tif = False 
     if_svs = False 
-    for suffix in ['.jpg', '.png', '.tiff']:
-        filename = prefix + suffix
-        if os.path.exists(filename):
-            file_exists = True
-            break
-    if os.path.exists(prefix + '.svs'): 
-        filename = prefix + '.svs'
-        file_exists = True 
+    suffix = os.path.splitext(he_raw)[1]
+    if suffix in ['.jpg', '.png', '.tiff']:
+        pass
+    elif suffix == '.svs': 
         if_svs = True 
-    if os.path.exists(prefix + '.ome.tif'):
-        filename = prefix + '.ome.tif'
-        file_exists = True 
+    elif suffix == '.ome.tif':
         if_ome_tif = True 
-    if os.path.exists(prefix + '.btf'):
-        filename = prefix + '.btf'
-        file_exists = True 
+    elif suffix == '.btf':
         if_ome_tif = True 
-        
-    if not file_exists:
-        raise FileNotFoundError('Image not found')
-    return filename, if_ome_tif, if_svs 
+    else:
+        raise ValueError(f'Unsupported file format: {suffix}')
+    return if_ome_tif, if_svs 
 
 def rescale_image(img, scale):
     if img.ndim == 2:
@@ -78,7 +68,7 @@ def adjust_margins(img, pad, pad_value=None):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', type=str)
+    parser.add_argument('--he_raw', type=str)
     parser.add_argument('--pixel_size_raw', type=float)
     args = parser.parse_args()
     return args
@@ -91,9 +81,9 @@ def main():
     pixel_size = 0.5 # rescale to resolution of 0.5 um/pixel 
     scale = args.pixel_size_raw / pixel_size
 
-    filename, if_ome_tif, if_svs = get_image_filename(
-            os.path.join(args.data_path, 'HE', 'he-raw'))
-    img = load_image(filename, if_ome_tif, if_svs)
+    if_ome_tif, if_svs = get_image_filename(args.he_raw)
+    data_path = os.path.dirname(args.he_raw)
+    img = load_image(args.he_raw, if_ome_tif, if_svs)
     img = img.astype(np.float32)
     print(f'Rescaling image (scale: {scale:.3f})...')
     t0 = time()
@@ -103,7 +93,7 @@ def main():
 
     pad = 224
     img = adjust_margins(img, pad=pad, pad_value=255)
-    save_image(img, os.path.join(args.data_path, 'HE', 'he.png'))
+    save_image(img, os.path.join(data_path, 'he.png'))
 
 if __name__ == '__main__':
     main()

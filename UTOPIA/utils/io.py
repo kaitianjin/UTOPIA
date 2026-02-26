@@ -21,6 +21,7 @@ def load_image(filename, if_ome_tif=False, if_svs=False, verbose=True):
         img = img.convert('RGB')
         img = np.array(img)
     else:
+        Image.MAX_IMAGE_PIXELS = None
         img = Image.open(filename)
         img = np.array(img)
         if img.ndim == 3 and img.shape[-1] == 4:
