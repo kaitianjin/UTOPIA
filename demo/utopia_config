@@ -1,6 +1,7 @@
 [global]
-# The directory containing the input data for UTOPIA.
-data_dir  = demo/
+# The directory containing the input data for UTOPIA. No need to change 
+# unless you run UTOPIA in bash outside the data folder. 
+data_dir  = ./
 # The directory where UNI's pytorch model bin file is located. 
 # Due to license restrictions,
 # we cannot provide the model checkpoint file in this repository.
@@ -71,5 +72,6 @@ cell_type = true
 
 [inference]
 # json file containing the list of genes/cell types/meta-gene/composite cell types
-# to infer prediction confidence. 
-infer_json = demo/targets_to_infer.json
+# to infer prediction confidence. No need to change unless you run UTOPIA in 
+# bash outside the data folder. 
+infer_json = ./targets_to_infer.json

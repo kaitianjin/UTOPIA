@@ -45,6 +45,8 @@ utopia --config utopia_config --inference
 
 ## Input data needed for UTOPIA
 
+**Upcoming:** We are developing an automatic pipeline to read raw files from VisiumHD and Xenium output to directly get the following files.
+
 UTOPIA requires the following seven files, organized within a structured data directory.
 
 ### H&E Image
@@ -71,38 +73,9 @@ where `<RAW_HE_IMAGE_FILE>` is the the raw H&E image (supported formats: `.jpg`,
 
 ### Configuration Files
 
-**`utopia_config`** — The main UTOPIA configuration file. Users should modify this file to specify data-dependent settings, including the location(s) of region(s) of interest (ROIs).
+**[`utopia_config`](demo/utopia_config)** — The main UTOPIA configuration file. Users should modify this file to specify data-dependent settings, including the location(s) of region(s) of interest (ROIs).
 
-**`targets_to_infer.json`** — A JSON file specifying the genes, meta-genes, cell types, and composite cell types for which prediction confidence will be inferred.
-
-```json
-{
-    "gene_groups": [
-        {
-            "null_number": 0.05,
-            "groups": [
-                { "genes": ["EPCAM"] },
-                { "genes": ["EPCAM", "CDH1"], "name": "EPCAM_CDH1_meta" }
-            ]
-        },
-        {
-            "null_number": 0.2,
-            "groups": [
-                { "genes": ["MS4A1"] }
-            ]
-        }
-    ],
-    "ct_groups": [
-        {
-            "null_number": 0,
-            "groups": [
-                { "cell_types": ["Tumor"] },
-                { "cell_types": ["Tumor", "Epithelial"], "name": "Tumor_Epithelial_meta" }
-            ]
-        }
-    ]
-}
-```
+**[`targets_to_infer.json`](demo/targets_to_infer.json)** — A JSON file specifying the genes, meta-genes, cell types, and composite cell types for which prediction confidence will be inferred.
 
 ### Directory Structure
 
@@ -156,3 +129,4 @@ data/
 ```
 
 You can see the confidence scores and raw predictions in the `results` folder.
+
