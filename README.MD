@@ -75,6 +75,43 @@ where `<RAW_HE_IMAGE_FILE>` is the the raw H&E image (supported formats: `.jpg`,
 
 **`targets_to_infer.json`** — A JSON file specifying the genes, meta-genes, cell types, and composite cell types for which prediction confidence will be inferred.
 
+
+```json
+{
+    "gene_groups": [
+        {
+            "null_number": 0.2,
+            "groups": [
+                { "genes": ["EPCAM"] },
+                { "genes": ["EPCAM", "CDH1"], "name": "EPCAM_CDH1_meta" }
+            ]
+        },
+        {
+            "null_number": 0.01,
+            "groups": [
+                { "genes": ["MS4A1"] }
+            ]
+        }
+    ],
+    "ct_groups": [
+        {
+            "null_number": 0.1,
+            "groups": [
+                { "cell_types": ["Tumor"] },
+                { "cell_types": ["Tumor", "Epithelial"], "name": "Tumor_Epithelial_meta" }
+            ]
+        },
+        {
+            "null_number": 0.05,
+            "groups": [
+                { "cell_types": ["B_cell"] }
+            ]
+        }
+    ]
+}
+```
+
+
 ### Directory Structure
 
 Please organize the data as follows.
