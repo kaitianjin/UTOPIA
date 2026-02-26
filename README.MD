@@ -1,5 +1,5 @@
 # Multiscale confidence quantification for virtual spatial transcriptomics with UTOPIA
-Kaitian Jin, Zihao Chen, Xiaokang Yu, Musu Yuan, Amelia Schroeder, Bernhard Dumoulin, Yunhe Liu, Linghua Wang, Jeong Hwan Park, Tae Hyun Hwang, Katalin Susztak, Zhimei Ren, Nancy R. Zhang12, Mingyao Li
+Kaitian Jin, Zihao Chen, Xiaokang Yu, Musu Yuan, Amelia Schroeder, Bernhard Dumoulin, Yunhe Liu, Linghua Wang, Jeong Hwan Park, Tae Hyun Hwang, Katalin Susztak, Zhimei Ren, Nancy R. Zhang, Mingyao Li
 
 <p align="center">
   <img src="assets/pipeline.jpeg" alt="UTOPIA Pipeline" />
@@ -20,11 +20,14 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-***If the raw H&E image is in .svs, .ome.tif, .btf format, you also need to install `openslide` and/or `tifffile`. See `requirements.txt`.***
+**If the raw H&E image is in `.svs`, `.ome.tif`, `.btf` format, you also need to install `openslide` and/or `tifffile`. See `requirements.txt`.**
 
 ## Demo
-We have prepared a demo dataset (the same as Figure 2 in the paper) for you to get familiar with UTOPIA. We have already aligned and processed the Xenium data and put them in the 
-correct format UTOPIA needs. We also skip the first two time-consuming steps to save you time. You can play around with the demo dataset using the following command. 
+We have prepared a demo dataset (the same as Figure 2 in the paper) for you to get familiar with UTOPIA. 
+See the link in `demo` to download the data.
+We have already aligned and processed the Xenium data and put them in the correct format UTOPIA needs. 
+We also skip the first two time-consuming steps to save you time. 
+You can play around with the demo dataset using the following command. 
 You can modify `targets_to_infer.json` to select genes or cell types you'd like to explore. 
 For full list of genes and cell types, see `gene_list.txt` and `cell_type_list.txt`.
 
