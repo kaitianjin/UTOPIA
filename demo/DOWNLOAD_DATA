@@ -1,2 +1,10 @@
 Please download the demo dataset (5.81GB) from PennBox 
 https://upenn.box.com/s/5kgy0wg5dyoccordv6w8ej8x15me65bt
+
+If PennBox is too slow for you, try the Zenodo link here
+https://zenodo.org/records/18794410
+Please download all files (demo.z01, demo.z02, and demo.zip) 
+in the link. Use the following bash script to unzip the file.
+
+zip -s 0 demo.zip --out demo_combined.zip
+unzip demo_combined.zip
