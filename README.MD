@@ -1,5 +1,4 @@
 # Multiscale confidence quantification for virtual spatial transcriptomics with UTOPIA
-Kaitian Jin, Zihao Chen, Xiaokang Yu, Musu Yuan, Amelia Schroeder, Bernhard Dumoulin, Yunhe Liu, Linghua Wang, Jeong Hwan Park, Tae Hyun Hwang, Katalin Susztak, Zhimei Ren, Nancy R. Zhang, Mingyao Li
 
 <p align="center">
   <img src="assets/pipeline.jpeg" alt="UTOPIA Pipeline" />
