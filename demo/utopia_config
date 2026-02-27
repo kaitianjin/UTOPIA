@@ -31,8 +31,6 @@ width  = 504,504
 height = 504,504
 
 [scale]
-# the original pixel size of he_raw image in microns
-pixel_size_raw = 0.5 
 # Scale factors, space-separated.
 # scale = 1 corresponds to the original superpixel size (16x16 pixels),
 # scale = 2 corresponds to 32x32 pixels, etc.
