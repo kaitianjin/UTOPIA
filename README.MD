@@ -30,6 +30,8 @@ You can play around with the demo dataset using the following command.
 You can modify `targets_to_infer.json` to select genes or cell types you'd like to explore. 
 For full list of genes and cell types, see `gene_list.txt` and `cell_type_list.txt`.
 
+> **Tip:** We strongly recommend running the following command in a background script (e.g., using `nohup` or `screen`), as the calibration step alone takes approximately 2–3 hours.
+
 ```bash
 cd demo
 # utopia --config utopia_config --get_tissue_mask
@@ -128,4 +130,10 @@ data/
 ```
 
 You can see the confidence scores and raw predictions in the `results` folder.
+
+# FAQ
+
+**Q: I encountered a `CUDA_OUT_OF_MEMORY` error during the calibration step. What should I do?**
+
+A: In `utopia_config`, under the `[calibration]` section, reduce `parallel_process` to `4` or an even smaller number.
 
