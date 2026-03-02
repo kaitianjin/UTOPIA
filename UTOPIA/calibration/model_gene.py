@@ -151,12 +151,12 @@ def train_model(model, X_train, y_train, X_val=None, y_val=None, loss='rmse',
             avg_val_loss = np.mean(val_losses)
             history['val_loss'].append(avg_val_loss)
             
-            print(f'Epoch [{epoch+1}/{epochs}] - '
-                  f'Train Loss: {avg_train_loss:.4f} - '
-                  f'Val Loss: {avg_val_loss:.4f}')
-        else:
-            print(f'Epoch [{epoch+1}/{epochs}] - '
-                  f'Train Loss: {avg_train_loss:.4f}')
+        #     print(f'Epoch [{epoch+1}/{epochs}] - '
+        #           f'Train Loss: {avg_train_loss:.4f} - '
+        #           f'Val Loss: {avg_val_loss:.4f}')
+        # else:
+        #     print(f'Epoch [{epoch+1}/{epochs}] - '
+        #           f'Train Loss: {avg_train_loss:.4f}')
     
     return history
 
