@@ -93,6 +93,10 @@ def main():
     model.eval()
     
     he = load_image(os.path.join(args.data_path, "HE", "he.png"))
+
+    if not os.path.exists(os.path.join(args.data_path, "embeddings")):
+        os.makedirs(os.path.join(args.data_path, "embeddings"))
+        
     dataset = PatchDataset(he, stride=16*args.down_samp_step)
     dataloader = DataLoader(dataset, shuffle=False, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
     

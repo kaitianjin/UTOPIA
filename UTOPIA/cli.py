@@ -129,7 +129,7 @@ def main():
         run([py, '-m', 'UTOPIA.img_process.reduce_dimensions',
              '--data_paths', data_dir,
              '--scale', *scales.split(),
-             '--wsi', '--roi', '--clean', '--num_roi', num_roi])
+             '--wsi', '--roi', '--clean'])
      
     # ------------------------------------------------------------------
     # 3. Prepare transcript / cell-type data for ROI

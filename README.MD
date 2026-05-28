@@ -133,7 +133,7 @@ You can see the confidence scores and raw predictions in the `results` folder.
 
 # FAQ
 
-**Q: I encountered a `CUDA_OUT_OF_MEMORY` error during the calibration step. What should I do?**
+**Q: I encountered `CUDA error: out of memory` during the calibration step. What should I do?**
 
 A: In `utopia_config`, under the `[calibration]` section, reduce `parallel_process` to `4` or an even smaller number.
 
