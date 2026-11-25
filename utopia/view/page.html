@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UTOPIA results</title>
+<style>
+/* One light theme, deliberately: the header is specified in black on white, and
+   a dark mode would have to contradict it. */
+:root {
+  --bg: #ffffff; --panel: #f6f7f9; --line: #d8dce3; --ink: #000000; --muted: #5b6270;
+  /* The wordmark's own blue, sampled from assets/logo.png. */
+  --utopia: #1c6da0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+       font-family: Arial, Helvetica, sans-serif; font-size: 13px; line-height: 1.45; }
+header { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex;
+         align-items: center; gap: 16px; flex-wrap: wrap; }
+#logo { height: 26px; width: auto; display: block; }
+#header-lines { display: flex; flex-direction: column; gap: 2px; }
+#header-lines div { font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 1.5; }
+.head-label { color: #000000; }
+.head-value { color: var(--utopia); margin-right: 14px; }
+.head-value:last-child { margin-right: 0; }
+#controls { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 16px;
+            border-bottom: 1px solid var(--line); background: var(--panel); }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field > label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+                 color: var(--muted); }
+select { background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+         border-radius: 4px; padding: 3px 6px; font: inherit; min-width: 110px; }
+.methods { display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: 520px; }
+.methods label { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+/* The method this package is named for, wherever its name is shown. */
+.utopia { color: var(--utopia); font-weight: 700; letter-spacing: .02em; }
+/* The loupe keeps its height whether or not the cursor is over a panel, so that
+   moving onto a panel never reflows the grid underneath it. */
+#loupe { display: flex; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--line);
+         align-items: flex-start; overflow-x: auto; min-height: 132px; }
+.loupe-cell { text-align: center; font-size: 10.5px; color: var(--muted); }
+.loupe-cell canvas { width: 88px; height: 88px; image-rendering: pixelated;
+                     border: 1px solid var(--line); border-radius: 3px; display: block; }
+.loupe-cell .value { color: var(--ink); font-variant-numeric: tabular-nums; }
+#cursor { font-variant-numeric: tabular-nums; color: var(--muted); padding-top: 30px;
+          white-space: nowrap; min-width: 200px; }
+#panels { display: grid; gap: 12px; padding: 12px 16px;
+          grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.panel { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.panel h2 { margin: 0; font-size: 11.5px; font-weight: 600; padding: 6px 9px;
+            border-bottom: 1px solid var(--line); display: flex; justify-content: space-between;
+            gap: 8px; }
+.panel h2 .note { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.panel canvas { width: 100%; display: block; background: #fff; }
+#status { padding: 20px 16px; color: var(--muted); }
+footer { padding: 10px 16px 24px; color: var(--muted); font-size: 11.5px;
+         border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <img id="logo" src="data:image/png;base64,__LOGO__" alt="UTOPIA">
+  <div id="header-lines">
+    <div id="header-fixed"></div>
+    <div id="header-meta"></div>
+  </div>
+</header>
+
+<div id="controls"></div>
+<div id="loupe"></div>
+<div id="status">loading…</div>
+<div id="panels"></div>
+<footer id="footer">UTOPIA v__VERSION__</footer>
+
+<script id="payload" type="text/plain">__PAYLOAD__</script>
+<script>
+"use strict";
+const MANIFEST = /*__MANIFEST__*/null;
+
+/* Every map is drawn on 0 to 1: the built-in model divides a gene target by the
+   99.99th percentile of its calibration truth and a cell-type target by the
+   99.9th, so the measured maximum inside the ROIs is 1.  Test units above it
+   are clipped to the top of the ramp. */
+const VMAX = 1;
+/* Longest side a panel is rasterised at.  The full-resolution copy stays
+   off-screen for the loupe; capping the visible canvas keeps hovering smooth. */
+const MAX_PANEL_SIDE = 2000;
+/* Half-width of the magnified neighbourhood, in lattice cells. */
+const LOUPE_HALF = 12;
+const LOUPE_CENTRE = "#00ff00";   /* marks the hovered cell in every zoom box */
+/* A page opens with every null of its target ticked while that makes at most
+   this many confidence panels; a larger sweep opens on its first null. */
+const MAX_DEFAULT_PANELS = 12;
+
+/* Inline mode inflates one gzipped buffer holding every array back to back and
+   slices views out of it; serve mode fetches each array as float32 instead. */
+class ArrayStore {
+  constructor(manifest) {
+    this.manifest = manifest;
+    this.cache = new Map();
+    this.buffer = null;
+  }
+
+  async ready() {
+    if (!this.manifest.inline) return;
+    const text = document.getElementById("payload").textContent.trim();
+    const binary = atob(text);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    this.buffer = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async get(key) {
+    if (!key) return null;
+    if (this.cache.has(key)) return this.cache.get(key);
+    const values = this.manifest.inline ? this._decode(key) : await this._fetch(key);
+    this.cache.set(key, values);
+    return values;
+  }
+
+  _decode(key) {
+    const meta = this.manifest.arrays[key];
+    const slice = this.buffer.buffer.slice(
+      this.buffer.byteOffset + meta.offset, this.buffer.byteOffset + meta.offset + meta.bytes);
+    const count = meta.n * (meta.columns || 1);
+    let raw;
+    if (meta.dtype === "u8") raw = new Uint8Array(slice, 0, count);
+    else if (meta.dtype === "u32") raw = new Uint32Array(slice, 0, count);
+    else raw = new Uint16Array(slice, 0, count);
+    const out = new Float32Array(count);
+    if (meta.min === undefined) { out.set(raw); return out; }
+    const step = (meta.max - meta.min) / 65535;
+    for (let i = 0; i < count; i++) out[i] = meta.min + raw[i] * step;
+    return out;
+  }
+
+  async _fetch(key) {
+    const response = await fetch("array?key=" + encodeURIComponent(key));
+    if (!response.ok) throw new Error("array " + key + ": " + response.status);
+    return new Float32Array(await response.arrayBuffer());
+  }
+}
+
+function clamp255(x) { return x < 0 ? 0 : x > 255 ? 255 : x; }
+
+/* Matches matplotlib's "turbo" and "hot", so a panel and the written PNG of the
+   same array are the same picture. */
+function turbo(t) {
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const r = 34.61 + t * (1172.33 + t * (-10793.56 + t * (33300.12 + t * (-38394.49 + t * 14825.05))));
+  const g = 23.31 + t * (557.33 + t * (1225.33 + t * (-3574.96 + t * (1073.77 + t * 707.56))));
+  const b = 27.2 + t * (3211.1 + t * (-15327.97 + t * (27814.0 + t * (-22569.18 + t * 6838.66))));
+  return [clamp255(r), clamp255(g), clamp255(b)];
+}
+function hot(t) {
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const r = Math.min(1, t / 0.365079), g = Math.min(1, Math.max(0, (t - 0.365079) / 0.365079));
+  const b = Math.min(1, Math.max(0, (t - 0.746032) / 0.253968));
+  return [r * 255, g * 255, b * 255];
+}
+
+function rampTable(fn) {
+  const table = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const [r, g, b] = fn(i / 255);
+    table[i * 3] = r; table[i * 3 + 1] = g; table[i * 3 + 2] = b;
+  }
+  return table;
+}
+const TURBO = rampTable(turbo), HOT = rampTable(hot);
+
+const state = {
+  model: null, sample: null, target: null, scale: null, cluster: null,
+  /* The nulls and methods that are ticked; one confidence panel is drawn for
+     every pair of them. */
+  nulls: [], methods: [], overlay: true, cursor: null,
+};
+let store = null;
+let panels = [];            /* one entry per drawn panel, in grid order */
+let indexMap = null;        /* lattice cell -> unit row, for the hover readout */
+let indexMapKey = "";
+let loupeCells = [];        /* built once per redraw, updated on hover */
+let hoverPending = false;
+
+const $ = (id) => document.getElementById(id);
+const modelOf = () => MANIFEST.models[state.model];
+const sampleOf = () => modelOf().samples[state.sample];
+const targetOf = () => sampleOf().targets[state.target];
+const unitsOf = () => sampleOf().units[targetOf().modality + "/" + state.scale];
+
+function selectField(label, options, value, onChange) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const caption = document.createElement("label");
+  caption.textContent = label;
+  wrap.appendChild(caption);
+  const select = document.createElement("select");
+  options.forEach((option) => {
+    const item = document.createElement("option");
+    item.value = String(option);
+    item.textContent = String(option);
+    if (String(option) === String(value)) item.selected = true;
+    select.appendChild(item);
+  });
+  select.onchange = () => onChange(select.value);
+  wrap.appendChild(select);
+  return wrap;
+}
+
+/* ``textOf`` turns an option into the text shown beside its tick box; without
+   it the option itself is shown. */
+function checkField(label, options, chosen, onChange, textOf) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const caption = document.createElement("label");
+  caption.textContent = label;
+  wrap.appendChild(caption);
+  const box = document.createElement("div");
+  box.className = "methods";
+  options.forEach((option) => {
+    const item = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = chosen.includes(option);
+    input.onchange = () => onChange(option, input.checked);
+    item.appendChild(input);
+    item.appendChild(document.createTextNode(textOf ? textOf(option) : option));
+    box.appendChild(item);
+  });
+  wrap.appendChild(box);
+  return wrap;
+}
+
+/* The axes are read off the manifest each time, so choosing a target that only
+   one method covers narrows the method list rather than leaving a dead entry. */
+function reconcile() {
+  const models = Object.keys(MANIFEST.models);
+  if (!models.includes(state.model)) state.model = models[0];
+  const samples = Object.keys(modelOf().samples);
+  if (!samples.includes(state.sample)) state.sample = samples[0];
+  const targets = Object.keys(sampleOf().targets);
+  if (!targets.includes(state.target)) state.target = targets[0];
+
+  const target = targetOf();
+  const methods = Object.keys(target.methods);
+  state.methods = state.methods.filter((name) => methods.includes(name));
+  if (!state.methods.length) state.methods = methods.slice();
+
+  /* Ticked nulls keep the order of the list; with none left, the page falls
+     back to its opening choice. */
+  const nulls = nullValues();
+  state.nulls = nulls.filter((name) => state.nulls.includes(name));
+  if (!state.nulls.length) state.nulls = defaultNulls(nulls);
+
+  const scales = scaleValues();
+  if (!scales.includes(state.scale)) state.scale = scales[0];
+
+  const labels = clusterLabels();
+  if (!labels.includes(state.cluster)) state.cluster = labels[0] || null;
+}
+
+/* Every null the current target was tested against, by any method, smallest
+   first.  A null is known by the name of its ``null_<name>`` directory. */
+function nullValues() {
+  const found = new Set();
+  Object.values(targetOf().methods).forEach((method) =>
+    Object.keys(method.nulls).forEach((name) => found.add(name)));
+  return [...found].sort((a, b) => nullNumber(a) - nullNumber(b));
+}
+
+/* The number a null stands for, as run_meta.json records it.  The directory
+   name is that number unless targets.yaml gave the null a name of its own. */
+function nullNumber(name) {
+  const header = modelOf().header || {};
+  const declared = ((header.targets || {})[state.target] || {}).nulls || [];
+  const match = declared.find((entry) => String(entry.name) === String(name));
+  return match ? Number(match.value) : parseFloat(name);
+}
+
+/* How a null is written on the page: its name, followed by its number when the
+   name does not already say it. */
+function nullLabel(name) {
+  const value = nullNumber(name);
+  if (Number.isNaN(value) || parseFloat(name) === value) return String(name);
+  return name + " (" + value + ")";
+}
+
+/* The nulls ticked when a target is first shown: all of them, unless that
+   would open the page on more panels than MAX_DEFAULT_PANELS. */
+function defaultNulls(nulls) {
+  const nPanels = nulls.length * state.methods.length;
+  return nPanels <= MAX_DEFAULT_PANELS ? nulls.slice() : nulls.slice(0, 1);
+}
+
+function scaleValues() {
+  return Object.keys(targetOf().arrays).map(Number).sort((a, b) => a - b);
+}
+
+function clusterLabels() {
+  const found = new Set();
+  Object.values(targetOf().methods).forEach((method) => {
+    state.nulls.forEach((name) => {
+      const entry = method.nulls[name];
+      if (!entry) return;
+      Object.keys(entry.arrays).forEach((label) => { if (label !== "-") found.add(label); });
+    });
+  });
+  return [...found].sort((a, b) => (parseInt(a.replace(/\D/g, ""), 10) || 0) -
+                                   (parseInt(b.replace(/\D/g, ""), 10) || 0));
+}
+
+function buildControls() {
+  const box = $("controls");
+  box.innerHTML = "";
+  const set = (key) => (value) => { state[key] = value; redraw(); };
+  /* An axis the page was fixed on has one value and appears in the header
+     instead, so only the axes that can still be chosen become selectors. */
+  const models = Object.keys(MANIFEST.models);
+  if (models.length > 1) box.appendChild(selectField("model", models, state.model, set("model")));
+  const samples = Object.keys(modelOf().samples);
+  if (samples.length > 1) box.appendChild(selectField("sample", samples, state.sample, set("sample")));
+  const targets = Object.keys(sampleOf().targets);
+  if (targets.length > 1) box.appendChild(selectField("target", targets, state.target, set("target")));
+
+  /* The nulls are always listed, also when the target has only one, so the
+     page says what the confidence is a confidence of. */
+  const nulls = nullValues();
+  box.appendChild(checkField(nulls.length > 1 ? "nulls" : "null", nulls, state.nulls,
+    (name, on) => {
+      state.nulls = nulls.filter((other) => (other === name ? on : state.nulls.includes(other)));
+      redraw();
+    }, nullLabel));
+  const scales = scaleValues();
+  if (scales.length > 1) {
+    box.appendChild(selectField("scale", scales, state.scale,
+                                (v) => { state.scale = Number(v); redraw(); }));
+  }
+  const labels = clusterLabels();
+  if (labels.length) box.appendChild(selectField("clusters", labels, state.cluster, set("cluster")));
+
+  box.appendChild(checkField("methods", Object.keys(targetOf().methods), state.methods,
+    (name, on) => {
+      state.methods = on ? [...state.methods, name] : state.methods.filter((m) => m !== name);
+      redraw();
+    }));
+  box.appendChild(selectField("ROI overlay", ["on", "off"], state.overlay ? "on" : "off",
+                              (v) => { state.overlay = v === "on"; redraw(); }));
+}
+
+/* Colours behind the units when a sample has a tissue mask, as in the written
+   PNGs: a confidence map is grey with darker tissue, a magnitude map white
+   with light grey tissue. */
+const CONFIDENCE_BACKDROP = { background: 172, tissue: 100 };
+const MAGNITUDE_BACKDROP = { background: 255, tissue: 225 };
+
+/* Colour every canvas cell one unit covers: its own cell when the radius is 0,
+   otherwise a disk, or a square of half-width ``radius``. */
+function stamp(data, rows, cols, row, col, radius, square, r, g, b) {
+  const reach = Math.max(0, Math.floor(radius));
+  for (let dr = -reach; dr <= reach; dr++) {
+    const rr = row + dr;
+    if (rr < 0 || rr >= rows) continue;
+    for (let dc = -reach; dc <= reach; dc++) {
+      if (!square && dr * dr + dc * dc > radius * radius) continue;
+      const cc = col + dc;
+      if (cc < 0 || cc >= cols) continue;
+      const offset = (rr * cols + cc) * 4;
+      data[offset] = r; data[offset + 1] = g; data[offset + 2] = b; data[offset + 3] = 255;
+    }
+  }
+}
+
+function paint(source, values, positions, shape, radius, square, table, low, high, binary,
+               tissue, backdrop) {
+  const [rows, cols] = shape;
+  source.width = cols;
+  source.height = rows;
+  const context = source.getContext("2d", { willReadFrequently: true });
+  const image = context.createImageData(cols, rows);
+  const data = image.data;
+  data.fill(255);
+  if (tissue && tissue.length === rows * cols) {
+    for (let cell = 0; cell < rows * cols; cell++) {
+      const grey = tissue[cell] > 0 ? backdrop.tissue : backdrop.background;
+      const offset = cell * 4;
+      data[offset] = grey; data[offset + 1] = grey; data[offset + 2] = grey;
+    }
+  }
+  const span = high - low || 1;
+  const n = Math.min(values.length, positions.length / 2);
+  for (let i = 0; i < n; i++) {
+    const value = values[i];
+    if (Number.isNaN(value)) continue;
+    let r, g, b;
+    if (binary) {
+      const on = value > 0.5;
+      r = on ? 178 : 232; g = on ? 24 : 234; b = on ? 43 : 238;
+    } else {
+      let t = Math.round(((value - low) / span) * 255);
+      t = t < 0 ? 0 : t > 255 ? 255 : t;
+      r = table[t * 3]; g = table[t * 3 + 1]; b = table[t * 3 + 2];
+    }
+    stamp(data, rows, cols, positions[i * 2], positions[i * 2 + 1], radius, square, r, g, b);
+  }
+  context.putImageData(image, 0, 0);
+}
+
+function overlayCalib(source, values, positions, shape, radius, square, low, high) {
+  /* Over the calibration units the picture shows what was measured, so one
+     map carries both the answer and the evidence for it. */
+  const context = source.getContext("2d", { willReadFrequently: true });
+  const [rows, cols] = shape;
+  const image = context.getImageData(0, 0, cols, rows);
+  const data = image.data;
+  const n = Math.min(values.length, positions.length / 2);
+  for (let i = 0; i < n; i++) {
+    let t = Math.round(((values[i] - low) / (high - low || 1)) * 255);
+    t = t < 0 ? 0 : t > 255 ? 255 : t;
+    const r = TURBO[t * 3], g = TURBO[t * 3 + 1], b = TURBO[t * 3 + 2];
+    stamp(data, rows, cols, positions[i * 2], positions[i * 2 + 1], radius, square, r, g, b);
+  }
+  context.putImageData(image, 0, 0);
+}
+
+/* The visible canvas is a capped-resolution copy of the full-resolution source:
+   hovering never touches it, and the browser composites far fewer pixels. */
+function blit(source, canvas) {
+  const factor = Math.min(1, MAX_PANEL_SIDE / Math.max(source.width, source.height));
+  canvas.width = Math.max(1, Math.round(source.width * factor));
+  canvas.height = Math.max(1, Math.round(source.height * factor));
+  const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = factor < 1;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
+}
+
+function confidenceOf(pvals) {
+  /* The same map utopia.uncertainty.pvals_to_confidence applies, so the panel
+     and the written PNG agree; p_min and p_max come from run_meta.json. */
+  const { p_min, p_max } = MANIFEST.confidence;
+  const lo = Math.log(p_min) / Math.LN10, hi = Math.log(p_max) / Math.LN10;
+  const denominator = -lo + hi;
+  const out = new Float32Array(pvals.length);
+  for (let i = 0; i < pvals.length; i++) {
+    const p = pvals[i] > 0 ? pvals[i] : Number.MIN_VALUE;
+    const value = (-(Math.log(p) / Math.LN10) + hi) / denominator;
+    out[i] = value < 0 ? 0 : value > 1 ? 1 : value;
+  }
+  return out;
+}
+
+/* A panel or loupe caption naming a method; the method this package is named
+   for is shown in the wordmark's blue. */
+function writeTitle(element, title) {
+  element.textContent = "";
+  const parts = String(title).split(/\b(UTOPIA)\b/);
+  parts.forEach((part) => {
+    if (!part) return;
+    if (part === "UTOPIA") {
+      const marked = document.createElement("span");
+      marked.className = "utopia";
+      marked.textContent = part;
+      element.appendChild(marked);
+    } else {
+      element.appendChild(document.createTextNode(part));
+    }
+  });
+}
+
+function makePanel(title, note) {
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  const heading = document.createElement("h2");
+  const name = document.createElement("span");
+  writeTitle(name, title);
+  const span = document.createElement("span");
+  span.className = "note";
+  span.textContent = note || "";
+  heading.appendChild(name);
+  heading.appendChild(span);
+  const canvas = document.createElement("canvas");
+  panel.appendChild(heading);
+  panel.appendChild(canvas);
+  $("panels").appendChild(panel);
+  return canvas;
+}
+
+/* Which unit each canvas cell belongs to, for the hover readout.  A unit owns
+   every cell ``stamp`` paints for it, and units are entered in paint order, so
+   where two spots overlap the readout names the one that is visible. */
+function buildIndexMap(positions, shape, radius, square) {
+  const key = state.model + "|" + state.sample + "|" + targetOf().modality + "|" + state.scale;
+  if (indexMapKey === key && indexMap) return indexMap;
+  const [rows, cols] = shape;
+  const map = new Int32Array(rows * cols).fill(-1);
+  const reach = Math.max(0, Math.floor(radius));
+  for (let i = 0; i < positions.length / 2; i++) {
+    const row = positions[i * 2], col = positions[i * 2 + 1];
+    for (let dr = -reach; dr <= reach; dr++) {
+      const rr = row + dr;
+      if (rr < 0 || rr >= rows) continue;
+      for (let dc = -reach; dc <= reach; dc++) {
+        if (!square && dr * dr + dc * dc > radius * radius) continue;
+        const cc = col + dc;
+        if (cc < 0 || cc >= cols) continue;
+        map[rr * cols + cc] = i;
+      }
+    }
+  }
+  indexMap = map;
+  indexMapKey = key;
+  return map;
+}
+
+async function redraw() {
+  reconcile();
+  writeHeader();
+  buildControls();
+  $("status").textContent = "drawing…";
+  $("panels").innerHTML = "";
+  panels = [];
+
+  const target = targetOf();
+  const units = unitsOf();
+  if (!units || !units.positions) {
+    $("status").textContent =
+      "this store carries no positions.npy, so it has no maps to draw (see docs/DATA_STRUCTURE.md)";
+    return;
+  }
+  const arrays = target.arrays[String(state.scale)] || {};
+  const shape = units.canvas;
+  const radius = units.radius || 0;
+  const square = Boolean(units.square);
+  const positions = await store.get(units.positions);
+  const display = (target.display || {})[String(state.scale)] || 1;
+  /* The built-in model draws every map of a target on [0, display]. An external
+     run records one range per slide and kind instead: that slide's 0.1th and
+     99.9th percentiles, for prediction and truth independently. */
+  const ranges = (target.range || {})[String(state.scale)] || {};
+  const rangeOf = (kind) => ranges[kind] || [0, VMAX * display];
+  const rangeNote = (kind) =>
+    rangeOf(kind)[0].toPrecision(3) + " – " + rangeOf(kind)[1].toPrecision(3) +
+    (ranges[kind] ? " (0.1–99.9th percentile)" : "");
+  const calibPositions = units.calib_positions ? await store.get(units.calib_positions) : null;
+  const overlayOn = state.overlay && calibPositions && arrays.calib_truth;
+  const calibValues = overlayOn ? await store.get(arrays.calib_truth) : null;
+  /* Only an external sample with an H&E has a tissue mask; without one the
+     panels keep their plain white background. */
+  const tissue = units.tissue ? await store.get(units.tissue) : null;
+
+  const drawn = [];
+  function addPanel(title, note, values, table, low, high, binary, pvals) {
+    const canvas = makePanel(title, note);
+    const source = document.createElement("canvas");
+    const backdrop = table === HOT ? CONFIDENCE_BACKDROP : MAGNITUDE_BACKDROP;
+    paint(source, values, positions, shape, radius, square, table, low, high, binary,
+          tissue, backdrop);
+    if (overlayOn) {
+      const [calibLow, calibHigh] = rangeOf("calib_truth");
+      overlayCalib(source, calibValues, calibPositions, shape, radius, square, calibLow, calibHigh);
+    }
+    blit(source, canvas);
+    canvas.onmousemove = (event) => onHover(event, canvas, shape);
+    drawn.push({ title, canvas, source, values, pvals });
+  }
+
+  const prediction = arrays.prediction ? await store.get(arrays.prediction) : null;
+  if (prediction) {
+    addPanel("prediction", rangeNote("prediction"),
+             prediction, TURBO, rangeOf("prediction")[0], rangeOf("prediction")[1], false, null);
+  }
+  const truth = arrays.truth ? await store.get(arrays.truth) : null;
+  if (truth) {
+    addPanel("measured truth", rangeNote("truth"),
+             truth, TURBO, rangeOf("truth")[0], rangeOf("truth")[1], false, null);
+    /* One measured call per ticked null: where the truth exceeds that null. */
+    for (const name of state.nulls) {
+      const nullValue = nullNumber(name);
+      const call = new Float32Array(truth.length);
+      for (let i = 0; i < truth.length; i++) call[i] = truth[i] > nullValue ? 1 : 0;
+      addPanel("truth > " + nullLabel(name), "measured call", call, TURBO, 0, 1, true, null);
+    }
+  }
+
+  /* One confidence panel per ticked method and ticked null.  The nulls of one
+     method sit next to each other, so a sweep reads left to right. */
+  for (const method of state.methods) {
+    const perNull = (target.methods[method] || {}).nulls || {};
+    for (const name of state.nulls) {
+      const entry = perNull[name];
+      if (!entry) continue;
+      const label = entry.arrays[state.cluster] ? state.cluster : "-";
+      const key = (entry.arrays[label] || {})[String(state.scale)];
+      if (!key) continue;
+      const pvals = await store.get(key);
+      const title = method + (label === "-" ? "" : " · " + label) + " · null " + nullLabel(name);
+      addPanel(title, "confidence", confidenceOf(pvals), HOT, 0, 1, false, pvals);
+    }
+  }
+
+  panels = drawn;
+  buildIndexMap(positions, shape, radius, square);
+  buildLoupe();
+  $("status").textContent = "";
+}
+
+/* The loupe's DOM is built once per redraw and only its pixels and numbers
+   change on hover, so moving the cursor costs one small drawImage call per
+   panel and no layout at all. */
+function buildLoupe() {
+  const box = $("loupe");
+  box.innerHTML = "";
+  loupeCells = [];
+  const readout = document.createElement("div");
+  readout.id = "cursor";
+  readout.textContent = "hover a panel";
+  box.appendChild(readout);
+
+  panels.forEach((panel) => {
+    const cell = document.createElement("div");
+    cell.className = "loupe-cell";
+    const canvas = document.createElement("canvas");
+    canvas.width = LOUPE_HALF * 2 + 1;
+    canvas.height = LOUPE_HALF * 2 + 1;
+    const caption = document.createElement("div");
+    writeTitle(caption, panel.title);
+    const value = document.createElement("div");
+    value.className = "value";
+    value.textContent = "—";
+    cell.appendChild(canvas);
+    cell.appendChild(caption);
+    cell.appendChild(value);
+    box.appendChild(cell);
+    loupeCells.push({ canvas, value, panel });
+  });
+}
+
+function onHover(event, canvas, shape) {
+  const box = canvas.getBoundingClientRect();
+  state.cursor = {
+    row: Math.floor(((event.clientY - box.top) / box.height) * shape[0]),
+    col: Math.floor(((event.clientX - box.left) / box.width) * shape[1]),
+    shape,
+  };
+  /* One update per animation frame, so a burst of mousemove events redraws
+     once and the loupe keeps up with the cursor. */
+  if (hoverPending) return;
+  hoverPending = true;
+  requestAnimationFrame(() => { hoverPending = false; updateLoupe(); });
+}
+
+function updateLoupe() {
+  if (!state.cursor || !loupeCells.length) return;
+  const { row, col, shape } = state.cursor;
+  const unit = indexMap ? indexMap[row * shape[1] + col] : -1;
+  $("cursor").textContent =
+    `row ${row}, col ${col}` + (unit >= 0 ? ` · unit ${unit}` : " · no unit here");
+
+  const side = LOUPE_HALF * 2 + 1;
+  loupeCells.forEach(({ canvas, value, panel }) => {
+    const context = canvas.getContext("2d");
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, side, side);
+    context.drawImage(panel.source, col - LOUPE_HALF, row - LOUPE_HALF, side, side, 0, 0, side, side);
+    /* The centre pixel is the cell under the cursor, the one the readout
+       describes; green appears on neither colour scale, so it always shows. */
+    context.fillStyle = LOUPE_CENTRE;
+    context.fillRect(LOUPE_HALF, LOUPE_HALF, 1, 1);
+    if (unit < 0) { value.textContent = "—"; return; }
+    value.textContent = panel.pvals
+      ? "p " + panel.pvals[unit].toPrecision(3)
+      : Number(panel.values[unit]).toPrecision(4);
+  });
+}
+
+/* Header lines are label/value pairs: the label names an axis in black, the
+   value beside it is the wordmark's blue. */
+function headerLine(target, pairs) {
+  const box = $(target);
+  box.innerHTML = "";
+  pairs.forEach(([label, value]) => {
+    const name = document.createElement("span");
+    name.className = "head-label";
+    name.textContent = label + ": ";
+    const shown = document.createElement("span");
+    shown.className = "head-value";
+    shown.textContent = value;
+    box.appendChild(name);
+    box.appendChild(shown);
+  });
+}
+
+/* The first header line: the axes the page was fixed on, then every null of
+   the current target.  Rewritten on each redraw, because a page that is not
+   fixed on a target can move to one with other nulls. */
+function writeHeader() {
+  const nulls = nullValues();
+  const pairs = Object.entries(MANIFEST.fixed || {});
+  pairs.push([nulls.length > 1 ? "nulls" : "null", nulls.map(nullLabel).join(", ")]);
+  headerLine("header-fixed", pairs);
+}
+
+(async function main() {
+  const header = MANIFEST.models[Object.keys(MANIFEST.models)[0]].header || {};
+  if (Object.keys(MANIFEST.fixed || {}).length) document.title = "UTOPIA · " + MANIFEST.label;
+  /* ``mode`` is worth a line only when it is not the ordinary one: an external
+     store, predicted and calibrated outside UTOPIA. */
+  headerLine("header-meta", [
+    ...(header.mode && header.mode !== "builtin" ? [["mode", header.mode]] : []),
+    ["source", MANIFEST.source],
+    ["built", MANIFEST.generated],
+  ]);
+  store = new ArrayStore(MANIFEST);
+  try {
+    await store.ready();
+  } catch (error) {
+    $("status").textContent = "could not inflate the payload: " + error.message;
+    return;
+  }
+  await redraw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "utopia"
+version = "0.2.0"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "torch",
+    "torchvision",
+    "timm",
+    "pillow",
+    "scikit-learn",
+    "scikit-image",
+    "matplotlib",
+    "pandas",
+    "pyyaml",
+    "scipy",
+    "tqdm",
+]
+
+[project.scripts]
+utopia = "utopia.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["utopia*"]
+
+[tool.setuptools.package-data]
+"utopia.view" = ["page.html", "logo.png"]
